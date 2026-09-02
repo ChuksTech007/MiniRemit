@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Rule {
+  id              String      @id @default(uuid())
+  userAddress     String
+  title           String
+  prompt          String
+  ruleType        String      // SCHEDULED | BALANCE_TRIGGER | SPLIT_INCOMING
+  token           String      @default("cUSD") // cUSD | USDC | USDT | CELO
+  amount          String      // e.g. "15.0" or "25%"
+  recipient       String      // 0x... EVM address
+  schedule        String?     // Cron expression e.g. "0 10 * * 5"
+  condition       String?     // Condition criteria e.g. "incoming > 50"
+  status          String      @default("ACTIVE") // ACTIVE | PAUSED | COMPLETED
+  lastExecutedAt  DateTime?
+  nextRunAt       DateTime?
+  totalExecuted   Int         @default(0)
+  totalValueMoved Float       @default(0.0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  executions      Execution[]
+}
+
+model Execution {
+  id             String   @id @default(uuid())
+  ruleId         String
+  rule           Rule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  txHash         String?
+  status         String   // SUCCESS | FAILED | PENDING
+  amount         String
+  token          String
+  recipient      String
+  attributionTag String?
+  gasUsed        String?
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+}
+
