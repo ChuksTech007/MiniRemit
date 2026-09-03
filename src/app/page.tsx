@@ -13,7 +13,6 @@ import {
   ArrowUpRight,
   Sparkles,
   RefreshCw,
-  Wallet,
   Tag,
   Coins,
 } from "lucide-react";
@@ -212,9 +211,18 @@ export default function Dashboard() {
 
         {/* Network & Tag Pills */}
         <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href="https://8004scan.io/agents/celo/9812"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#181A1D] hover:bg-[#22252A] border border-[#2B2F36] text-xs text-gray-300 transition"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-[#35D07F]" />
+            <span>Agent ID: <strong className="text-white font-mono">#9812</strong></span>
+          </a>
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#181A1D] border border-[#2B2F36] text-xs text-gray-300">
             <Tag className="w-3.5 h-3.5 text-[#FBCC5C]" />
-            <span>Tag: <strong className="text-white font-mono">celo_miniremit</strong></span>
+            <span>Tag: <strong className="text-white font-mono">celo_97f21f965c25</strong></span>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#35D07F]/10 border border-[#35D07F]/30 text-xs text-[#35D07F]">
             <span className="w-2 h-2 rounded-full bg-[#35D07F] animate-pulse"></span>
@@ -495,4 +503,3 @@ export default function Dashboard() {
     </div>
   );
 }
-

@@ -1,26 +1,25 @@
 # Dependencies
-node_modules
+node_modules/
 .pnp
 .pnp.js
 
 # Testing
-coverage
+coverage/
 
 # Next.js build output
 .next/
 out/
-
-# Production
-build
+build/
 
 # Misc
 .DS_Store
 *.pem
 
-# Local env files
-.env*.local
+# Local env files & tokens
 .env
+.env*.local
 celo_auth_token.json
+celo_registration_result.json
 
 # Prisma SQLite database
 prisma/*.db
@@ -32,4 +31,3 @@ prisma/*.db-journal
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
-
