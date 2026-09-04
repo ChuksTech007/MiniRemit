@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { memoryStore } from "@/lib/store";
 
 export async function PATCH(
   req: Request,
@@ -10,12 +11,16 @@ export async function PATCH(
     const body = await req.json();
     const { status } = body;
 
-    const updated = await prisma.rule.update({
-      where: { id },
-      data: { status },
-    });
-
-    return NextResponse.json({ success: true, data: updated });
+    try {
+      const updated = await prisma.rule.update({
+        where: { id },
+        data: { status },
+      });
+      return NextResponse.json({ success: true, data: updated });
+    } catch {
+      const updated = memoryStore.updateRule(id, { status });
+      return NextResponse.json({ success: true, data: updated });
+    }
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Failed to update rule" },
@@ -30,7 +35,11 @@ export async function DELETE(
 ) {
   try {
     const { id } = params;
-    await prisma.rule.delete({ where: { id } });
+    try {
+      await prisma.rule.delete({ where: { id } });
+    } catch {
+      memoryStore.deleteRule(id);
+    }
     return NextResponse.json({ success: true, message: "Rule deleted" });
   } catch (error: any) {
     return NextResponse.json(

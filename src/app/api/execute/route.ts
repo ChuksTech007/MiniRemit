@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { memoryStore } from "@/lib/store";
 import { executeTransfer } from "@/lib/blockchain/dispatcher";
 
 export async function POST(req: Request) {
@@ -7,9 +8,14 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { ruleId, simulate } = body;
 
-    const rule = await prisma.rule.findUnique({
-      where: { id: ruleId },
-    });
+    let rule: any = null;
+    try {
+      rule = await prisma.rule.findUnique({
+        where: { id: ruleId },
+      });
+    } catch {
+      rule = memoryStore.getRuleById(ruleId);
+    }
 
     if (!rule) {
       return NextResponse.json({ error: "Rule not found" }, { status: 404 });
@@ -45,8 +51,32 @@ export async function POST(req: Request) {
       }
     }
 
-    const execution = await prisma.execution.create({
-      data: {
+    let execution: any = null;
+    try {
+      execution = await prisma.execution.create({
+        data: {
+          ruleId: rule.id,
+          status,
+          amount: rule.amount,
+          token: rule.token,
+          recipient: rule.recipient,
+          txHash: txHash || null,
+          attributionTag: process.env.CELO_ATTRIBUTION_TAG || "celo_97f21f965c25",
+          errorMessage: errorMessage || null,
+        },
+      });
+
+      const numericAmount = parseFloat(rule.amount.replace("%", "")) || 0;
+      await prisma.rule.update({
+        where: { id: rule.id },
+        data: {
+          lastExecutedAt: new Date(),
+          totalExecuted: { increment: 1 },
+          totalValueMoved: { increment: status === "SUCCESS" ? numericAmount : 0 },
+        },
+      });
+    } catch {
+      execution = memoryStore.createExecution({
         ruleId: rule.id,
         status,
         amount: rule.amount,
@@ -55,18 +85,8 @@ export async function POST(req: Request) {
         txHash: txHash || null,
         attributionTag: process.env.CELO_ATTRIBUTION_TAG || "celo_97f21f965c25",
         errorMessage: errorMessage || null,
-      },
-    });
-
-    const numericAmount = parseFloat(rule.amount.replace("%", "")) || 0;
-    await prisma.rule.update({
-      where: { id: rule.id },
-      data: {
-        lastExecutedAt: new Date(),
-        totalExecuted: { increment: 1 },
-        totalValueMoved: { increment: status === "SUCCESS" ? numericAmount : 0 },
-      },
-    });
+      });
+    }
 
     return NextResponse.json({
       success: status === "SUCCESS",
