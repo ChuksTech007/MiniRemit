@@ -15,7 +15,13 @@ import {
   RefreshCw,
   Tag,
   Coins,
+  Wallet,
+  ToggleLeft,
+  ToggleRight,
+  ExternalLink,
+  Lock,
 } from "lucide-react";
+import { executeLiveClientTransfer, requestCeloNetwork, TREASURY_WALLET, PROTOCOL_FEE_PERCENT } from "@/lib/blockchain/clientTx";
 
 interface Rule {
   id: string;
@@ -59,6 +65,9 @@ interface ParsedRule {
 }
 
 export default function Dashboard() {
+  // Mode: "SIMULATION" | "LIVE"
+  const [mode, setMode] = useState<"SIMULATION" | "LIVE">("SIMULATION");
+  const [connectedWallet, setConnectedWallet] = useState<string | null>(null);
   const [userAddress, setUserAddress] = useState("0x5F88E4aEfD97c5bE5Fb88e56F07ca4105c3FA346");
   const [prompt, setPrompt] = useState("");
   const [isParsing, setIsParsing] = useState(false);
@@ -67,9 +76,48 @@ export default function Dashboard() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [loadingRules, setLoadingRules] = useState(false);
   const [executingRuleId, setExecutingRuleId] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string; link?: string } | null>(null);
 
-  // Load rules from API & LocalStorage
+  // Check if wallet is already connected
+  useEffect(() => {
+    if (typeof window !== "undefined" && (window as any).ethereum) {
+      (window as any).ethereum
+        .request({ method: "eth_accounts" })
+        .then((accounts: string[]) => {
+          if (accounts && accounts.length > 0) {
+            setConnectedWallet(accounts[0]);
+            setUserAddress(accounts[0]);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  const connectWallet = async () => {
+    if (typeof window === "undefined" || !(window as any).ethereum) {
+      setActionMessage({
+        type: "error",
+        text: "No Web3 wallet found. Please install MetaMask or open in MiniPay.",
+      });
+      return;
+    }
+    try {
+      const ethereum = (window as any).ethereum;
+      const accounts = await ethereum.request({ method: "eth_requestAccounts" });
+      if (accounts && accounts.length > 0) {
+        setConnectedWallet(accounts[0]);
+        setUserAddress(accounts[0]);
+        await requestCeloNetwork();
+        setActionMessage({
+          type: "success",
+          text: `Connected wallet: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`,
+        });
+      }
+    } catch (err: any) {
+      setActionMessage({ type: "error", text: err.message || "Failed to connect wallet" });
+    }
+  };
+
   const fetchRules = async () => {
     try {
       setLoadingRules(true);
@@ -88,7 +136,6 @@ export default function Dashboard() {
       setLoadingRules(false);
     }
 
-    // Fallback to localStorage if API is cold
     try {
       const saved = localStorage.getItem("miniremit_rules");
       if (saved) {
@@ -167,7 +214,6 @@ export default function Dashboard() {
       setParsedResult(null);
       setPrompt("");
     } catch (err: any) {
-      // Offline fallback
       setRules((prev) => {
         const next = [fallbackRule, ...prev];
         localStorage.setItem("miniremit_rules", JSON.stringify(next));
@@ -188,6 +234,63 @@ export default function Dashboard() {
     const rule = rules.find((r) => r.id === ruleId);
     if (!rule) return;
 
+    if (mode === "LIVE") {
+      // Real on-chain transfer directly with connected wallet
+      if (!connectedWallet) {
+        await connectWallet();
+      }
+
+      const result = await executeLiveClientTransfer({
+        recipient: rule.recipient,
+        amount: rule.amount.replace("%", ""),
+        token: rule.token,
+      });
+
+      if (result.success && result.txHash) {
+        const numAmount = parseFloat(rule.amount.replace("%", "")) || 0;
+        const newExec: Execution = {
+          id: `exec_${Date.now()}`,
+          status: "SUCCESS",
+          amount: rule.amount,
+          token: rule.token,
+          recipient: rule.recipient,
+          txHash: result.txHash,
+          createdAt: new Date().toISOString(),
+        };
+
+        setRules((prev) => {
+          const next = prev.map((r) => {
+            if (r.id === ruleId) {
+              return {
+                ...r,
+                totalExecuted: r.totalExecuted + 1,
+                totalValueMoved: r.totalValueMoved + numAmount,
+                lastExecutedAt: new Date().toISOString(),
+                executions: [newExec, ...(r.executions || []).slice(0, 4)],
+              };
+            }
+            return r;
+          });
+          localStorage.setItem("miniremit_rules", JSON.stringify(next));
+          return next;
+        });
+
+        setActionMessage({
+          type: "success",
+          text: `Live Celo Transaction Confirmed! Tx Hash: ${result.txHash.slice(0, 12)}...`,
+          link: result.explorerUrl,
+        });
+      } else {
+        setActionMessage({
+          type: "error",
+          text: result.error || "On-chain transaction was rejected or failed.",
+        });
+      }
+      setExecutingRuleId(null);
+      return;
+    }
+
+    // SIMULATION MODE
     try {
       const res = await fetch("/api/execute", {
         method: "POST",
@@ -228,7 +331,7 @@ export default function Dashboard() {
 
       setActionMessage({
         type: "success",
-        text: `Executed successfully! Tx Hash: ${txHash.slice(0, 10)}... (Attributed: celo_97f21f965c25)`,
+        text: `Simulation Executed! Attributed to celo_97f21f965c25. Tx: ${txHash.slice(0, 10)}...`,
       });
     } catch (err: any) {
       setActionMessage({ type: "error", text: err.message || "Execution failed." });
@@ -278,27 +381,78 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Network & Tag Pills */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Right Controls: Mode Switcher & Connect Wallet */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Mode Switcher */}
+          <button
+            onClick={() => {
+              const nextMode = mode === "SIMULATION" ? "LIVE" : "SIMULATION";
+              setMode(nextMode);
+              setActionMessage({
+                type: "success",
+                text: nextMode === "LIVE" ? "⚡ Switched to Live Celo Mainnet Mode!" : "🧪 Switched to Simulation Mode (Free testing).",
+              });
+            }}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-semibold transition ${
+              mode === "LIVE"
+                ? "bg-amber-500/10 border-amber-500/40 text-amber-300 shadow-lg shadow-amber-500/10"
+                : "bg-[#181A1D] border-[#2C3038] text-gray-300 hover:border-gray-500"
+            }`}
+          >
+            {mode === "LIVE" ? (
+              <>
+                <ToggleRight className="w-4 h-4 text-amber-400" />
+                <span>Mode: <strong className="text-white">Live On-Chain</strong></span>
+              </>
+            ) : (
+              <>
+                <ToggleLeft className="w-4 h-4 text-[#35D07F]" />
+                <span>Mode: <strong className="text-white">Simulation 🧪</strong></span>
+              </>
+            )}
+          </button>
+
+          {/* Connect Wallet */}
+          <button
+            onClick={connectWallet}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#181A1D] hover:bg-[#22252A] border border-[#2B2F36] text-xs font-medium text-white transition"
+          >
+            <Wallet className="w-3.5 h-3.5 text-[#35D07F]" />
+            <span>
+              {connectedWallet
+                ? `${connectedWallet.slice(0, 6)}...${connectedWallet.slice(-4)}`
+                : "Connect Wallet"}
+            </span>
+          </button>
+        </div>
+      </header>
+
+      {/* Badges Bar */}
+      <div className="flex items-center justify-between gap-2 flex-wrap py-3 px-4 my-4 rounded-xl bg-[#121417] border border-[#202328] text-xs text-gray-400">
+        <div className="flex items-center gap-3 flex-wrap">
           <a
             href="https://8004scan.io/agents/celo/9812"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#181A1D] hover:bg-[#22252A] border border-[#2B2F36] text-xs text-gray-300 transition"
+            className="flex items-center gap-1.5 text-gray-300 hover:text-white transition"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-[#35D07F]" />
             <span>Agent ID: <strong className="text-white font-mono">#9812</strong></span>
+            <ExternalLink className="w-3 h-3 text-gray-500" />
           </a>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#181A1D] border border-[#2B2F36] text-xs text-gray-300">
+          <span className="text-gray-600">•</span>
+          <div className="flex items-center gap-1.5">
             <Tag className="w-3.5 h-3.5 text-[#FBCC5C]" />
             <span>Tag: <strong className="text-white font-mono">celo_97f21f965c25</strong></span>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#35D07F]/10 border border-[#35D07F]/30 text-xs text-[#35D07F]">
-            <span className="w-2 h-2 rounded-full bg-[#35D07F] animate-pulse"></span>
-            <span>Celo Network</span>
-          </div>
         </div>
-      </header>
+
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-gray-500 flex items-center gap-1">
+            <Lock className="w-3 h-3 text-[#35D07F]" /> Non-Custodial Protocol Fee: 0.2%
+          </span>
+        </div>
+      </div>
 
       {/* Metrics Banner */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 my-6">
@@ -327,8 +481,8 @@ export default function Dashboard() {
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-gray-400">On-Chain Executions</p>
-            <p className="text-xl font-bold text-white">{totalExecs} <span className="text-xs font-normal text-gray-400">Attributed</span></p>
+            <p className="text-xs text-gray-400">Attributed Executions</p>
+            <p className="text-xl font-bold text-white">{totalExecs} <span className="text-xs font-normal text-gray-400">On-Chain Tagged</span></p>
           </div>
         </div>
       </section>
@@ -336,26 +490,43 @@ export default function Dashboard() {
       {/* Alerts */}
       {actionMessage && (
         <div
-          className={`p-4 mb-6 rounded-xl flex items-center gap-3 border text-sm animate-fadeIn ${
+          className={`p-4 mb-6 rounded-xl flex items-center justify-between gap-3 border text-sm animate-fadeIn ${
             actionMessage.type === "success"
               ? "bg-[#35D07F]/10 border-[#35D07F]/30 text-[#35D07F]"
               : "bg-red-500/10 border-red-500/30 text-red-400"
           }`}
         >
-          {actionMessage.type === "success" ? (
-            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <div className="flex items-center gap-3">
+            {actionMessage.type === "success" ? (
+              <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            )}
+            <span>{actionMessage.text}</span>
+          </div>
+          {actionMessage.link && (
+            <a
+              href={actionMessage.link}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1 rounded-lg bg-[#35D07F] text-black font-bold text-xs flex items-center gap-1 hover:bg-[#2EB870] transition flex-shrink-0"
+            >
+              View on CeloScan <ArrowUpRight className="w-3.5 h-3.5" />
+            </a>
           )}
-          <span>{actionMessage.text}</span>
         </div>
       )}
 
       {/* Natural Language AI Agent Input */}
       <section className="p-6 rounded-2xl bg-gradient-to-b from-[#181A1E] to-[#121417] border border-[#2B2F38] shadow-xl my-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles className="w-5 h-5 text-[#35D07F]" />
-          <h2 className="text-lg font-bold text-white">Create Automation with Plain English</h2>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-[#35D07F]" />
+            <h2 className="text-lg font-bold text-white">Create Automation with Plain English</h2>
+          </div>
+          <span className="text-xs px-2.5 py-1 rounded-full bg-[#181A1D] border border-[#282C34] text-gray-400">
+            {mode === "LIVE" ? "⚡ Live Mode Active" : "🧪 Free Simulation Active"}
+          </span>
         </div>
         <p className="text-xs text-gray-400 mb-4">
           Tell your agent what you want to automate. It translates your intent into an autonomous, tagged Celo payment rule.
@@ -510,14 +681,18 @@ export default function Dashboard() {
                     <button
                       onClick={() => handleExecuteNow(rule.id)}
                       disabled={executingRuleId === rule.id}
-                      className="px-3 py-1.5 rounded-lg bg-[#35D07F]/10 hover:bg-[#35D07F]/20 text-[#35D07F] border border-[#35D07F]/30 text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50"
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition disabled:opacity-50 ${
+                        mode === "LIVE"
+                          ? "bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20"
+                          : "bg-[#35D07F]/10 hover:bg-[#35D07F]/20 text-[#35D07F] border border-[#35D07F]/30"
+                      }`}
                     >
                       {executingRuleId === rule.id ? (
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                       ) : (
                         <Play className="w-3.5 h-3.5" />
                       )}
-                      Test Run Now
+                      {mode === "LIVE" ? "Send Live on Celo ⚡" : "Test Run (Simulate) 🧪"}
                     </button>
                     <button
                       onClick={() => handleDeleteRule(rule.id)}
@@ -571,8 +746,11 @@ export default function Dashboard() {
       </section>
 
       {/* Footer */}
-      <footer className="mt-12 pt-6 border-t border-[#1E2126] text-center text-xs text-gray-500">
+      <footer className="mt-12 pt-6 border-t border-[#1E2126] text-center text-xs text-gray-500 space-y-2">
         <p>Built for the Celo Agents at Work Hackathon • Powered by Celo L2, MiniPay & ERC-8021</p>
+        <p className="text-[11px] text-gray-600">
+          Treasury: <span className="font-mono text-gray-400">{TREASURY_WALLET}</span> • 100% Non-Custodial
+        </p>
       </footer>
     </div>
   );
