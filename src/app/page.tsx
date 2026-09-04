@@ -16,10 +16,11 @@ import {
   Tag,
   Coins,
   Wallet,
-  ToggleLeft,
-  ToggleRight,
   ExternalLink,
   Lock,
+  LogOut,
+  FlaskConical,
+  Activity,
 } from "lucide-react";
 import { executeLiveClientTransfer, requestCeloNetwork, TREASURY_WALLET, PROTOCOL_FEE_PERCENT } from "@/lib/blockchain/clientTx";
 
@@ -97,7 +98,7 @@ export default function Dashboard() {
     if (typeof window === "undefined" || !(window as any).ethereum) {
       setActionMessage({
         type: "error",
-        text: "No Web3 wallet found. Please install MetaMask or open in MiniPay.",
+        text: "No Web3 wallet found. Please install MetaMask or open inside MiniPay.",
       });
       return;
     }
@@ -116,6 +117,15 @@ export default function Dashboard() {
     } catch (err: any) {
       setActionMessage({ type: "error", text: err.message || "Failed to connect wallet" });
     }
+  };
+
+  const disconnectWallet = () => {
+    setConnectedWallet(null);
+    setUserAddress("0x5F88E4aEfD97c5bE5Fb88e56F07ca4105c3FA346");
+    setActionMessage({
+      type: "success",
+      text: "Wallet disconnected successfully.",
+    });
   };
 
   const fetchRules = async () => {
@@ -383,47 +393,77 @@ export default function Dashboard() {
 
         {/* Right Controls: Mode Switcher & Connect Wallet */}
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Mode Switcher */}
-          <button
-            onClick={() => {
-              const nextMode = mode === "SIMULATION" ? "LIVE" : "SIMULATION";
-              setMode(nextMode);
-              setActionMessage({
-                type: "success",
-                text: nextMode === "LIVE" ? "⚡ Switched to Live Celo Mainnet Mode!" : "🧪 Switched to Simulation Mode (Free testing).",
-              });
-            }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-semibold transition ${
-              mode === "LIVE"
-                ? "bg-amber-500/10 border-amber-500/40 text-amber-300 shadow-lg shadow-amber-500/10"
-                : "bg-[#181A1D] border-[#2C3038] text-gray-300 hover:border-gray-500"
-            }`}
-          >
-            {mode === "LIVE" ? (
-              <>
-                <ToggleRight className="w-4 h-4 text-amber-400" />
-                <span>Mode: <strong className="text-white">Live On-Chain</strong></span>
-              </>
-            ) : (
-              <>
-                <ToggleLeft className="w-4 h-4 text-[#35D07F]" />
-                <span>Mode: <strong className="text-white">Simulation 🧪</strong></span>
-              </>
-            )}
-          </button>
+          {/* Large Segmented Mode Selector */}
+          <div className="flex items-center p-1 bg-[#121417] border border-[#2B2F38] rounded-2xl shadow-inner">
+            <button
+              onClick={() => {
+                setMode("SIMULATION");
+                setActionMessage({
+                  type: "success",
+                  text: "🧪 Switched to Simulation Mode (Free sandbox testing - No wallet needed)",
+                });
+              }}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                mode === "SIMULATION"
+                  ? "bg-[#35D07F] text-black shadow-md shadow-[#35D07F]/20"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              <FlaskConical className="w-3.5 h-3.5" />
+              <span>Simulation 🧪</span>
+            </button>
 
-          {/* Connect Wallet */}
-          <button
-            onClick={connectWallet}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#181A1D] hover:bg-[#22252A] border border-[#2B2F36] text-xs font-medium text-white transition"
-          >
-            <Wallet className="w-3.5 h-3.5 text-[#35D07F]" />
-            <span>
-              {connectedWallet
-                ? `${connectedWallet.slice(0, 6)}...${connectedWallet.slice(-4)}`
-                : "Connect Wallet"}
-            </span>
-          </button>
+            <button
+              onClick={() => {
+                setMode("LIVE");
+                setActionMessage({
+                  type: "success",
+                  text: "⚡ Switched to Live On-Chain Mode (Connect wallet to execute real Celo transactions)",
+                });
+              }}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                mode === "LIVE"
+                  ? "bg-gradient-to-r from-amber-400 to-amber-500 text-black shadow-md shadow-amber-500/20"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span>Live On-Chain ⚡</span>
+            </button>
+          </div>
+
+          {/* Wallet Actions - Only visible when in LIVE Mode */}
+          {mode === "LIVE" ? (
+            connectedWallet ? (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#141619] border border-[#35D07F]/40 text-xs font-medium text-white shadow-sm">
+                <div className="w-2 h-2 rounded-full bg-[#35D07F] animate-pulse" />
+                <span className="font-mono">
+                  {connectedWallet.slice(0, 6)}...{connectedWallet.slice(-4)}
+                </span>
+                <button
+                  onClick={disconnectWallet}
+                  title="Disconnect Wallet"
+                  className="p-1 rounded-md text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition ml-1 flex items-center gap-1"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="text-[10px] hidden sm:inline">Disconnect</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={connectWallet}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#35D07F] to-[#28A745] hover:from-[#2EB870] hover:to-[#218838] text-black text-xs font-bold shadow-lg shadow-[#35D07F]/20 transition"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                <span>Connect Wallet</span>
+              </button>
+            )
+          ) : (
+            <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-[#141619] border border-[#22252A] text-xs text-gray-400 font-medium">
+              <span className="w-2 h-2 rounded-full bg-[#35D07F]" />
+              <span>Sandbox Mode (No Wallet Needed)</span>
+            </div>
+          )}
         </div>
       </header>
 
