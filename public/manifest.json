@@ -1,0 +1,9 @@
+{
+  "name": "MiniRemit",
+  "short_name": "MiniRemit",
+  "description": "Autonomous Stablecoin Remittance & Payment Agent on Celo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0E1012",
+  "theme_color": "#35D07F"
+}
