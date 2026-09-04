@@ -1,4 +1,4 @@
-# 🤖 MiniRemit — Always-On Stablecoin Remittance & Payment Agent for MiniPay Users
+# 🤖 MiniRemit - Always-On Stablecoin Remittance & Payment Agent for MiniPay Users
 
 [![Celo Network](https://img.shields.io/badge/Celo-Mainnet%20%26%20Sepolia-35D07F?style=for-the-badge&logo=celo)](https://celo.org)
 [![ERC-8021 Tagged](https://img.shields.io/badge/ERC--8021-celo__97f21f965c25-FBCC5C?style=for-the-badge)](https://dune.com/celo/agents-at-work-hackathon)
@@ -110,8 +110,8 @@ npm run worker
 
 ## 🏆 Hackathon Tracks Targeted
 
-1. **Track 1: Value Moved ($2,000)** — Generates continuous, measurable stablecoin transfer volume between independent parties with ERC-8021 tags.
-2. **Track 2: Real World Adoption ($1,750)** — Purpose-built for everyday MiniPay remittance and bill-payment use cases in emerging markets.
+1. **Track 1: Value Moved ($2,000)** - Generates continuous, measurable stablecoin transfer volume between independent parties with ERC-8021 tags.
+2. **Track 2: Real World Adoption ($1,750)** - Purpose-built for everyday MiniPay remittance and bill-payment use cases in emerging markets.
 
 ---
 
